@@ -14,11 +14,11 @@ goal was:
 
 basic fantasy:
 
-1. spin up a Chromium via Puppeteer [web:187][web:190]
-2. open akinator.com
-3. read whatever question DOM spits out
-4. decide “yes / no / don’t know / probably / probably not”
-5. click the proper answer button
+1. spin up a Chromium via Puppeteer [web:187][web:190]  
+2. open akinator.com  
+3. read whatever question DOM spits out  
+4. decide “yes / no / don’t know / probably / probably not”  
+5. click the proper answer button  
 6. repeat until it guesses
 
 no wrappers, no unofficial APIs, no jank clones. just remote-driving the original game.
@@ -36,8 +36,7 @@ high-level flow looked like:
   (not even fast, trying to be “human-ish” with delays) [web:171][web:176]
 
 in theory this is the kind of thing Puppeteer is literally made for:  
-click buttons, fill stuff, read DOM, loop. [web:171][web:174][web:187]
-
+click buttons, fill stuff, read DOM, loop. [web:171][web:174][web:187]  
 in practice, it turned into a giant “lol no”.
 
 ## how it fell apart
@@ -69,28 +68,32 @@ yes, there’s:
 - “real browser” modes
 - wrapper services that claim “undetectable Puppeteer” [web:177][web:180][web:189]
 
-tried that direction mentally and from docs, but for **interactive games**, not just scraping or form-filling, you get smacked by:
+for **interactive games**, not just scraping or form-filling, you still get smacked by:
 
 - continuous behavior analysis (not just one login page) [web:177][web:181]
-- UI changes that nukes your selectors
-- extra challenges mid-session
+- UI / DOM changes that nuke your selectors mid-game
+- extra challenges / weird flows dropped in randomly
 
 you can patch fingerprints all day, but the **behavior** still looks like a robot because… it is. [web:177][web:181]
 
 Akinator is literally a long chain of rapid, same-pattern clicks on 5 buttons. it screams “bot”.
 
-### 3. the architecture itself is cursed
+## the “we pulled an image” moment
 
-even ignoring detection, the whole setup sucks from a system-design POV:
+the real “ok this shit is cooked” moment was when we tried to get visual confirmation:
 
-- latency hell  
-  LLM call → browser click → game render → read DOM → repeat. every round-trip stacks delay.
-- race conditions  
-  sometimes Akinator animations / ads / popups block the question, DOM isn’t ready, selectors time out, etc. [web:176][web:187]
-- extreme fragility  
-  any minor frontend change on their side = your script silently breaks.
+- grabbed a **screenshot** from the browser instance at runtime (full page or viewport) using Puppeteer’s screenshot API. [web:190]
+- manually checked what the page actually looked like vs what the automation *thought* it was interacting with.
+- result: half the time you’d see:
+  - anti-bot / challenge pages
+  - broken or half-loaded UI
+  - overlays or modals blocking the game area
+  - or the layout shifted so your “reliable” selectors were clicking random crap
 
-and worst part: **you don’t control the game**. it’s someone else’s UI, rules, pacing, and anti-bot stack. you’re duct-taping a brain onto a black box it can’t really own.
+so on code level it looked “fine” (no thrown error at that line), but the screenshot made it obvious:  
+the browser session was in a completely different state than the script assumed.
+
+that was the final confirmation: even **with** full visual access, the automation could not be trusted to be on the right screen, in the right state, consistently. if the only way to be sure is “check the image manually every time”, then yeah, game over for any kind of stable agent.
 
 ## why “ANY browser instance” is a dead end here
 
@@ -110,7 +113,7 @@ and maybe you dodge detection for a bit. but for a *long interactive session* li
 
 - behavioral analysis
 - DOM churn
-- network tricks
+- network / challenge tricks
 
 means the approach is fundamentally brittle. it’s not “tune it more”, it’s “this layer is the wrong place to attach the brain”.
 
@@ -124,7 +127,7 @@ if the goal is “LLM + Akinator-like experience”, then:
 
 better options:
 
-- **clone the mechanic**, not the website: implement your own Akinator-style engine, with your own DB / inference / UI, where you control everything [web:164][web:179][web:182]
+- **clone the mechanic**, not the website: implement your own Akinator-style engine, with your own DB / inference / UI, where you control everything. [web:164][web:179][web:182]
 - let the LLM help with:
   - generating questions
   - mapping human answers
